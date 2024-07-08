@@ -6,3 +6,7 @@ reportlab
 openpyxl
 scikit-learn
 python-docx
+os
+io 
+time
+numpy
