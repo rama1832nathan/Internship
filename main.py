@@ -1,7 +1,7 @@
 import streamlit as st
 import plotly.express as px
 from data_loader import load_data
-from pdf_generator import generate_pdf_report
+from docx_generator import generate_docx_report
 from plots import generate_trendline_plot
 
 # Load data
@@ -20,10 +20,10 @@ def main_page():
         st.session_state['page'] = 'goals_page'
         st.experimental_rerun()
 
-    if st.sidebar.button('Download Full Report'):
-        pdf_file = generate_pdf_report(df_long, indicators)
+    if st.sidebar.button('Generate Full Report'):
+        pdf_file = generate_docx_report(df_long, indicators)
         with open(pdf_file, "rb") as file:
-            btn = st.download_button(label="Download PDF Report", data=file, file_name="final_report.pdf")
+            btn = st.download_button(label="Download DOCX Report", data=file, file_name="final_report.docx")
 
     # Filter data based on selections
     filtered_df = df_long[(df_long['Indicator'] == indicator) & (df_long['Year'].between(year_range[0], year_range[1]))]
