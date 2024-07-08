@@ -6,5 +6,4 @@ reportlab
 openpyxl
 scikit-learn
 python-docx
-time
 numpy
