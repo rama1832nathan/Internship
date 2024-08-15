@@ -2,10 +2,30 @@ import matplotlib.pyplot as plt
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.enum.section import  WD_SECTION_START
 import streamlit as st
+import docx
 import pandas as pd
 import io
 import time
+import io
+import urllib.request
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from PIL import Image,UnidentifiedImageError
+
+# your avatar URL as example
+url = ('https://drive.google.com/uc?export=download&id=1nB6n0ENZPHquN6hYl3sf7dlXGn5aP7kD')
+try:
+    content = urllib.request.urlopen(url).read()
+    cover_image = Image.open(io.BytesIO(content))
+    cover_image = cover_image.convert("RGB")
+except UnidentifiedImageError:
+    st.error("The image could not be identified or is not in a valid format.")
+    cover_image = None
+except Exception as e:
+    st.error(f"An error occurred while fetching the image: {e}")
+    cover_image = None
 
 def generate_docx_report(df_long, indicators):
     # Dictionary to store images by indicator number
@@ -58,12 +78,34 @@ def generate_docx_report(df_long, indicators):
     message_placeholder.empty()
 
     # Create the DOCX report
-    docx_file = create_docx_report(images_by_goal)
+    docx_file = create_docx_report(images_by_goal,cover_image)
 
     return docx_file
 
-def create_docx_report(images_by_goal):
+def add_border(section, color):
+    """Add border color for a section based on the SDG goal."""
+    sectPr = section._sectPr
+    pgBorders = OxmlElement('w:pgBorders')
+    pgBorders.set(qn('w:offsetFrom'), 'page')
+    for border_name in ('top', 'left', 'bottom', 'right'):
+        border = OxmlElement(f'w:{border_name}')
+        border.set(qn('w:val'), 'single')
+        border.set(qn('w:sz'), '30')  # Border thickness in half-points (10px = 7.5 points)
+        border.set(qn('w:space'), '24')
+        border.set(qn('w:color'), color)
+        pgBorders.append(border)
+    sectPr.append(pgBorders)
+
+def create_docx_report(images_by_goal, cover_image):
     doc = Document()
+
+    if cover_image:
+        cover_buffer = io.BytesIO()
+        cover_image.save(cover_buffer, format='PNG')
+        cover_buffer.seek(0)
+        doc.add_picture(cover_buffer, width=Inches(6), height=Inches(8))
+        doc.add_page_break()
+
     sdg_goals = [
         "No Poverty", "Zero Hunger", "Good Health and Well-being", "Quality Education",
         "Gender Equality", "Clean Water and Sanitation", "Affordable and Clean Energy",
@@ -73,6 +115,7 @@ def create_docx_report(images_by_goal):
         "Life on Land", "Peace, Justice, and Strong Institutions", "Partnerships for the Goals"
     ]
 
+    # Create index for SDG goals
     index_heading = doc.add_heading('Sustainable Development Goals', level=1)
     index_heading.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
@@ -83,7 +126,7 @@ def create_docx_report(images_by_goal):
     hdr_cells[1].text = 'SDG Goal'
     hdr_cells[2].text = 'Page No.'
 
-    page_number = 1
+    page_number = 3
     for i, goal in enumerate(sdg_goals, start=1):
         l = len(images_by_goal.get(i, []))
         row_cells = table.add_row().cells
@@ -92,32 +135,44 @@ def create_docx_report(images_by_goal):
         row_cells[2].text = str(page_number)
         page_number += l // 2 + 1 if l % 2 else l // 2
 
+    # Add a section break to start the new section after the index, but don't insert a page break
+    section = doc.add_section(WD_SECTION_START.CONTINUOUS)
+
+    # Unlink footer and set up page numbering to start from 1
+    section.footer.is_linked_to_previous = False  # Unlink from previous section
+    section.start_type = WD_SECTION_START.CONTINUOUS
+    section.page_number_start = 1  # Start numbering from 1
+
+    # Add page number to the footer
+    footer = section.footer
+    footer_paragraph = footer.paragraphs[0]
+    footer_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+    # Adding page number using an OxmlElement
+    run = footer_paragraph.add_run()
+    fldSimple = OxmlElement('w:fldSimple')
+    fldSimple.set(qn('w:instr'), 'PAGE')
+    run._r.append(fldSimple)
+
+    sdg_colors = [
+        "E5243B", "DDA63A", "4C9F38", "C5192D", "FF3A21", "26BDE2", "FCC30B",
+        "A21942", "FD6925", "DD1367", "FD9D24", "BF8B2E", "3F7E44", "0A97D9",
+        "56C02B", "00689D", "19486A"
+    ]
+
     # Iterate through SDG goals and their corresponding images
-    page_number = 1
     for goal_index, goal_images in images_by_goal.items():
-        doc.add_page_break()
+        section = doc.add_section()
+        add_border(section, sdg_colors[goal_index - 1])
+        # doc.add_page_break()
 
         # Add goal heading
         goal_heading = doc.add_heading(f'SDG {goal_index}: {sdg_goals[goal_index - 1]}', level=2)
         goal_heading.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
-        for i, img_buffer in enumerate(goal_images):
+        for img_buffer in goal_images:
             img_buffer.seek(0)
             doc.add_picture(img_buffer, width=Inches(6), height=Inches(4))
-
-            if i % 2 == 1:
-                # Add page number at the bottom
-                paragraph = doc.add_paragraph()
-                paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-                run = paragraph.add_run(str(page_number))
-                run.font.size = Pt(12)
-                page_number += 1
-        # Add page number at the bottom of the last page
-        paragraph = doc.add_paragraph()
-        paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-        run = paragraph.add_run(str(page_number))
-        run.font.size = Pt(12)
-        page_number += 1
 
     # Use buffer for the DOCX file
     docx_buffer = io.BytesIO()
