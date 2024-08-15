@@ -7,3 +7,4 @@ openpyxl
 scikit-learn
 python-docx
 numpy
+pillow
